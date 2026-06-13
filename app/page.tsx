@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Block =
   | {
@@ -17,10 +18,23 @@ type Block =
       id: string;
       type: "image";
       src: string;
+    }
+  | {
+      id: string;
+      type: "divider";
     };
+
+type StarableBlock = Exclude<Block, { type: "divider" }>;
 
 type DayEntry = {
   blocks: Block[];
+};
+
+type StarredItem = {
+  id: string;
+  name: string;
+  date: string;
+  block: StarableBlock;
 };
 
 const emptyEntry: DayEntry = {
@@ -111,11 +125,29 @@ export default function Home() {
   const [savedMessage, setSavedMessage] = useState("");
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
 
+  const [starredItems, setStarredItems] = useState<StarredItem[]>([]);
+  const [starModalOpen, setStarModalOpen] = useState(false);
+  const [starDraftName, setStarDraftName] = useState("");
+  const [selectedStarCategory, setSelectedStarCategory] = useState("");
+  const [starDraftBlock, setStarDraftBlock] = useState<StarableBlock | null>(
+    null
+  );
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInsertAfterBlockId = useRef<string | null>(null);
+  const starInputRef = useRef<HTMLInputElement | null>(null);
+
+  const existingStarCategories = useMemo(() => {
+    const categories = starredItems
+      .map((item) => item.name.trim())
+      .filter(Boolean);
+
+    return Array.from(new Set(categories)).sort((a, b) => a.localeCompare(b));
+  }, [starredItems]);
 
   useEffect(() => {
     const allDates = localStorage.getItem("pinkfontbtw-dates");
+    const savedStars = localStorage.getItem("pinkfontbtw-stars");
 
     if (allDates) {
       try {
@@ -130,6 +162,18 @@ export default function Home() {
         }
       } catch {
         setSavedDates([getTodayKey()]);
+      }
+    }
+
+    if (savedStars) {
+      try {
+        const parsedStars = JSON.parse(savedStars);
+
+        if (Array.isArray(parsedStars)) {
+          setStarredItems(parsedStars);
+        }
+      } catch {
+        setStarredItems([]);
       }
     }
   }, []);
@@ -151,6 +195,60 @@ export default function Home() {
     setSlashBlockId(null);
     setDateMenuOpen(false);
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (starModalOpen) {
+      setTimeout(() => {
+        starInputRef.current?.focus();
+      }, 30);
+    }
+  }, [starModalOpen]);
+
+  function resizeTextarea(textarea: HTMLTextAreaElement) {
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }
+
+  function createDividerFromTextBlock(
+    blockId: string,
+    beforeContent = "",
+    afterContent = ""
+  ) {
+    setEntry((currentEntry) => {
+      const newBlocks: Block[] = [];
+
+      currentEntry.blocks.forEach((block) => {
+        if (block.id === blockId && block.type === "text") {
+          if (beforeContent.trim()) {
+            newBlocks.push({
+              ...block,
+              content: beforeContent.trimEnd(),
+            });
+          }
+
+          newBlocks.push({
+            id: crypto.randomUUID(),
+            type: "divider",
+          });
+
+          newBlocks.push({
+            id: crypto.randomUUID(),
+            type: "text",
+            content: afterContent.trimStart(),
+          });
+        } else {
+          newBlocks.push(block);
+        }
+      });
+
+      return {
+        ...currentEntry,
+        blocks: newBlocks,
+      };
+    });
+
+    setSlashBlockId(null);
+  }
 
   function updateTextBlock(id: string, content: string) {
     setEntry((currentEntry) => ({
@@ -190,6 +288,30 @@ export default function Home() {
     });
 
     setSlashBlockId(null);
+  }
+
+  function insertImageAfterLastBlock(imageSrc: string) {
+    const lastBlock = entry.blocks[entry.blocks.length - 1];
+
+    if (!lastBlock) {
+      setEntry({
+        blocks: [
+          {
+            id: crypto.randomUUID(),
+            type: "image",
+            src: imageSrc,
+          },
+        ],
+      });
+
+      return;
+    }
+
+    insertBlockAfter(lastBlock.id, {
+      id: crypto.randomUUID(),
+      type: "image",
+      src: imageSrc,
+    });
   }
 
   function removeSlashFromBlock(blockId: string) {
@@ -252,6 +374,28 @@ export default function Home() {
     event.target.value = "";
   }
 
+  function handlePaste(event: React.ClipboardEvent<HTMLElement>) {
+    const items = event.clipboardData.items;
+
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+
+        if (!file) return;
+
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          insertImageAfterLastBlock(reader.result as string);
+        };
+
+        reader.readAsDataURL(file);
+        event.preventDefault();
+        return;
+      }
+    }
+  }
+
   function updateLinkBlock(id: string, url: string) {
     setEntry((currentEntry) => ({
       ...currentEntry,
@@ -277,6 +421,49 @@ export default function Home() {
     });
   }
 
+  function openStarModal(block: Block) {
+    if (block.type === "divider") return;
+
+    setStarDraftBlock(block);
+    setStarDraftName("");
+    setSelectedStarCategory(existingStarCategories[0] || "");
+    setStarModalOpen(true);
+  }
+
+  function closeStarModal() {
+    setStarModalOpen(false);
+    setStarDraftBlock(null);
+    setStarDraftName("");
+    setSelectedStarCategory("");
+  }
+
+  function saveStar() {
+    if (!starDraftBlock) return;
+
+    const folderName = (
+      starDraftName.trim() || selectedStarCategory.trim()
+    ).trim();
+
+    if (!folderName) return;
+
+    const newStar: StarredItem = {
+      id: crypto.randomUUID(),
+      name: folderName,
+      date: selectedDate,
+      block: starDraftBlock,
+    };
+
+    const updatedStars = [newStar, ...starredItems];
+
+    setStarredItems(updatedStars);
+    localStorage.setItem("pinkfontbtw-stars", JSON.stringify(updatedStars));
+
+    setSavedMessage(`added to ${folderName}`);
+    setTimeout(() => setSavedMessage(""), 1200);
+
+    closeStarModal();
+  }
+
   function handleSave() {
     const updatedDates = Array.from(new Set([selectedDate, ...savedDates]))
       .sort()
@@ -294,7 +481,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen w-full px-8 py-8 text-[#171412] md:px-12">
+    <main className="notebook-page min-h-screen w-full px-6 py-6 text-[#171412] md:px-10">
       <input
         ref={fileInputRef}
         type="file"
@@ -303,28 +490,28 @@ export default function Home() {
         className="hidden"
       />
 
-      <section className="min-h-screen w-full">
-        <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col pb-24 pt-4">
+      <section className="min-h-screen w-full" onPaste={handlePaste}>
+        <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col pb-24 pt-[2.75rem]">
           <header className="flex items-center justify-center">
             <div className="relative">
               <button
                 onClick={() => setDateMenuOpen((open) => !open)}
-                className="date-pill inline-flex items-center gap-3 rounded-full px-5 py-2 text-3xl tracking-[-0.08em] text-[#bd6073] transition hover:opacity-75 md:text-4xl"
+                className="inline-flex items-center gap-2 text-lg font-semibold tracking-[-0.02em] text-[#b86174] transition hover:opacity-75 md:text-xl"
               >
                 <span>{formatDateForDisplay(selectedDate)}</span>
-                <span className="mt-1 text-sm">⌄</span>
+                <span className="translate-y-[1px] text-xs">⌄</span>
               </button>
 
               {dateMenuOpen && (
-                <div className="date-menu absolute left-1/2 top-full z-30 mt-3 w-56 -translate-x-1/2 overflow-hidden rounded-2xl border border-[#bd6073]/10 bg-[#fff8f8]/80 p-2 shadow-2xl shadow-[#bd6073]/15 backdrop-blur-md">
+                <div className="date-menu absolute left-1/2 top-full z-30 mt-3 w-56 -translate-x-1/2 rounded-md border border-black/8 bg-[#faf7f2] p-2 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
                   {savedDates.map((date) => (
                     <button
                       key={date}
                       onClick={() => setSelectedDate(date)}
-                      className={`block w-full rounded-xl px-4 py-2 text-center text-sm tracking-[-0.03em] transition ${
+                      className={`block w-full rounded-sm px-3 py-2 text-center text-sm tracking-[-0.02em] transition ${
                         selectedDate === date
-                          ? "bg-[#efbfd0]/70 text-[#171412]"
-                          : "text-[#bd6073] hover:bg-[#f6d9e3]/60"
+                          ? "bg-[#efd4db] text-[#171412]"
+                          : "text-[#b86174] hover:bg-[#f4e7ea]"
                       }`}
                     >
                       {formatDateForDisplay(date)}
@@ -335,43 +522,82 @@ export default function Home() {
             </div>
           </header>
 
-          <h1 className="mt-14 text-center text-2xl tracking-[-0.06em] text-[#bd6073] md:text-[2rem]">
-            what is going on today...
+          <h1 className="mt-[3.72rem] text-center text-lg font-bold italic tracking-[-0.02em] text-[#b86174] md:text-xl">
+            today&apos;s field notes
           </h1>
 
-          <div className="mt-14 space-y-6">
+          <div className="mx-auto mt-[4.65rem] w-full max-w-[780px] space-y-[3.72rem]">
             {entry.blocks.map((block) => (
               <div key={block.id} className="group relative">
                 {block.type === "text" && (
                   <>
                     <textarea
                       value={block.content}
-                      onChange={(event) =>
-                        updateTextBlock(block.id, event.target.value)
-                      }
+                      onChange={(event) => {
+                        updateTextBlock(block.id, event.target.value);
+                        resizeTextarea(event.target);
+                      }}
+                      onInput={(event) => {
+                        resizeTextarea(event.currentTarget);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" || event.shiftKey) return;
+
+                        const textarea = event.currentTarget;
+                        const cursorPosition = textarea.selectionStart;
+                        const fullText = block.content;
+
+                        const textBeforeCursor = fullText.slice(
+                          0,
+                          cursorPosition
+                        );
+                        const textAfterCursor = fullText.slice(cursorPosition);
+
+                        const currentLineStart =
+                          textBeforeCursor.lastIndexOf("\n") + 1;
+                        const currentLine =
+                          textBeforeCursor.slice(currentLineStart);
+
+                        if (currentLine.trim() === "---") {
+                          event.preventDefault();
+
+                          const contentBeforeDivider =
+                            fullText.slice(0, currentLineStart);
+                          const contentAfterDivider = textAfterCursor.replace(
+                            /^\n/,
+                            ""
+                          );
+
+                          createDividerFromTextBlock(
+                            block.id,
+                            contentBeforeDivider,
+                            contentAfterDivider
+                          );
+                        }
+                      }}
                       placeholder="type / for options..."
-                      className="block min-h-10 w-full resize-none bg-transparent text-lg leading-relaxed tracking-[-0.03em] text-[#171412] outline-none placeholder:text-[#171412]/28 md:text-xl"
+                      className="block min-h-[62px] w-full resize-none overflow-hidden bg-transparent text-lg leading-relaxed tracking-[-0.01em] text-[#171412] outline-none placeholder:text-[#171412]/30 md:text-xl"
                     />
 
                     {slashBlockId === block.id && (
-                      <div className="absolute left-0 top-full z-20 mt-2 w-44 rounded-md border border-[#171412]/8 bg-[rgba(255,250,248,0.92)] p-2 text-sm shadow-lg backdrop-blur-sm">
+                      <div className="absolute left-0 top-full z-20 mt-2 w-44 rounded-md border border-black/8 bg-[#faf7f2] p-2 text-sm shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
                         <button
                           onClick={() => chooseText(block.id)}
-                          className="block w-full rounded px-3 py-2 text-left text-[#171412] hover:bg-[#f4dde3]"
+                          className="block w-full rounded-sm px-3 py-2 text-left text-[#171412] hover:bg-[#f4e7ea]"
                         >
                           text
                         </button>
 
                         <button
                           onClick={() => chooseLink(block.id)}
-                          className="block w-full rounded px-3 py-2 text-left text-[#171412] hover:bg-[#f4dde3]"
+                          className="block w-full rounded-sm px-3 py-2 text-left text-[#171412] hover:bg-[#f4e7ea]"
                         >
                           embed link
                         </button>
 
                         <button
                           onClick={() => chooseImage(block.id)}
-                          className="block w-full rounded px-3 py-2 text-left text-[#171412] hover:bg-[#f4dde3]"
+                          className="block w-full rounded-sm px-3 py-2 text-left text-[#171412] hover:bg-[#f4e7ea]"
                         >
                           paste picture
                         </button>
@@ -380,15 +606,21 @@ export default function Home() {
                   </>
                 )}
 
+                {block.type === "divider" && (
+                  <div className="py-[1.65rem]">
+                    <div className="h-px w-full bg-[#b86174]/25" />
+                  </div>
+                )}
+
                 {block.type === "link" && (
-                  <div className="rounded-sm bg-[#efbfd0]/70 px-5 py-4">
+                  <div className="rounded-sm bg-[#edc3cf]/75 px-4 py-3">
                     <input
                       value={block.url}
                       onChange={(event) =>
                         updateLinkBlock(block.id, event.target.value)
                       }
                       placeholder="paste link..."
-                      className="w-full bg-transparent text-center text-base tracking-[-0.03em] text-[#171412] outline-none placeholder:text-[#171412]/45 md:text-lg"
+                      className="w-full bg-transparent text-center text-lg tracking-[-0.01em] text-[#171412] outline-none placeholder:text-[#171412]/45 md:text-xl"
                     />
 
                     {block.url && (
@@ -396,7 +628,7 @@ export default function Home() {
                         href={block.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-2 block text-center text-xs text-[#171412]/55 underline-offset-4 hover:underline"
+                        className="mt-2 block text-center text-sm text-[#171412]/55 underline-offset-4 hover:underline"
                       >
                         {getLinkHost(block.url)}
                       </a>
@@ -412,31 +644,128 @@ export default function Home() {
                   />
                 )}
 
-                <button
-                  onClick={() => deleteBlock(block.id)}
-                  className="absolute right-0 top-0 hidden rounded-sm bg-[#f0c1d1]/75 px-2 py-1 text-xs text-[#8e4d5b] backdrop-blur-sm hover:bg-[#ecb5c8] group-hover:block"
-                >
-                  remove
-                </button>
+                <div className="absolute -right-12 top-0 hidden items-center gap-2 group-hover:flex">
+                  {block.type !== "divider" && (
+                    <button
+                      onClick={() => openStarModal(block)}
+                      className="text-lg text-[#b86174] transition hover:scale-110 hover:opacity-70"
+                      title="add to star folder"
+                    >
+                      ✦
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => deleteBlock(block.id)}
+                    className="rounded-sm bg-[#f3d8df] px-2 py-1 text-[11px] text-[#8f5561] hover:bg-[#eec8d2]"
+                  >
+                    remove
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="fixed bottom-7 right-8 flex items-center gap-3 md:bottom-8 md:right-10">
+        <div className="fixed bottom-6 left-6 flex items-center gap-2 md:bottom-8 md:left-8">
+          <Link
+            href="/stars"
+            className="text-lg tracking-[-0.02em] text-[#b86174] transition hover:opacity-65 md:text-xl"
+          >
+            ✦ star folders
+          </Link>
+
+          {starredItems.length > 0 && (
+            <span className="text-sm text-[#b86174]/60">
+              {starredItems.length}
+            </span>
+          )}
+        </div>
+
+        <div className="fixed bottom-6 right-6 flex items-center gap-3 md:bottom-8 md:right-8">
           {savedMessage && (
-            <p className="text-sm tracking-[-0.04em] text-[#bd6073]/65">
+            <p className="text-xs tracking-[-0.03em] text-[#b86174]/70 md:text-sm">
               {savedMessage}
             </p>
           )}
 
           <button
             onClick={handleSave}
-            className="text-2xl tracking-[-0.07em] text-[#bd6073] transition hover:opacity-65 md:text-3xl"
+            className="text-lg tracking-[-0.02em] text-[#b86174] transition hover:opacity-65 md:text-xl"
           >
             save
           </button>
         </div>
+
+        {starModalOpen && (
+          <div className="fixed inset-0 z-40 bg-[#fbf8f4]/55">
+            <div className="notebook-page flex min-h-screen items-start justify-center px-6 pt-32">
+              <div className="w-full max-w-md rounded-[26px] border border-[#e8d8dc] bg-[rgba(251,248,244,0.92)] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.08)]">
+                <p className="text-center text-2xl text-[#b86174]">✦</p>
+
+                <h2 className="mt-3 text-center text-lg font-bold italic tracking-[-0.02em] text-[#b86174]">
+                  add to star folder
+                </h2>
+
+                {existingStarCategories.length > 0 && (
+                  <div className="mt-5">
+                    <p className="mb-2 text-center text-sm text-[#171412]/45">
+                      choose folder
+                    </p>
+
+                    <select
+                      value={selectedStarCategory}
+                      onChange={(event) =>
+                        setSelectedStarCategory(event.target.value)
+                      }
+                      className="w-full rounded-full border border-[#ead9dd] bg-white/70 px-5 py-3 text-center text-base text-[#171412] outline-none"
+                    >
+                      {existingStarCategories.map((category) => (
+                        <option key={category} value={category}>
+                          ✦ {category}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="mt-5">
+                  <p className="mb-2 text-center text-sm text-[#171412]/45">
+                    or create new folder
+                  </p>
+
+                  <input
+                    ref={starInputRef}
+                    value={starDraftName}
+                    onChange={(event) => setStarDraftName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") saveStar();
+                      if (event.key === "Escape") closeStarModal();
+                    }}
+                    placeholder="branding"
+                    className="w-full rounded-full border border-[#ead9dd] bg-white/70 px-5 py-3 text-center text-base text-[#171412] outline-none placeholder:text-[#171412]/35"
+                  />
+                </div>
+
+                <div className="mt-5 flex items-center justify-center gap-3">
+                  <button
+                    onClick={closeStarModal}
+                    className="rounded-full border border-[#ead9dd] px-4 py-2 text-sm text-[#b86174] transition hover:bg-[#f7eef1]"
+                  >
+                    cancel
+                  </button>
+
+                  <button
+                    onClick={saveStar}
+                    className="rounded-full bg-[#efc8d3] px-4 py-2 text-sm text-[#8f5561] transition hover:opacity-80"
+                  >
+                    add to folder
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </main>
   );

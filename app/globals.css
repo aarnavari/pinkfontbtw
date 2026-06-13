@@ -1,72 +1,94 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fbf8f4;
+  --background: #f8f4ef;
   --foreground: #171412;
-  --accent: #bd6073;
+  --accent: #b86174;
+  --grid-x: 72px;
+  --grid-y: 62px;
 }
 
 * {
   box-sizing: border-box;
 }
 
-html,
-body {
+html {
   min-height: 100%;
+  background: #fbf8f4;
 }
 
 body {
+  min-height: 100vh;
   margin: 0;
+  position: relative;
+  overflow-x: hidden;
   color: var(--foreground);
-  background:
-    radial-gradient(circle at 48% 38%, rgba(231, 63, 91, 0.24), transparent 12%),
-    radial-gradient(circle at 40% 52%, rgba(242, 118, 145, 0.22), transparent 18%),
-    radial-gradient(circle at 58% 48%, rgba(218, 92, 175, 0.18), transparent 16%),
-    radial-gradient(circle at 49% 70%, rgba(246, 108, 84, 0.17), transparent 10%),
-    radial-gradient(circle at 33% 64%, rgba(218, 121, 191, 0.13), transparent 12%),
-    radial-gradient(circle at 64% 22%, rgba(255, 183, 201, 0.2), transparent 18%),
-    radial-gradient(circle at 82% 78%, rgba(229, 199, 176, 0.15), transparent 22%),
-    linear-gradient(180deg, #fcfaf8 0%, #f9f5f0 45%, #f7f2ec 100%);
+  background: #fbf8f4;
   font-family: Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
+/* Fixed notebook paper layer — stays visible forever while scrolling */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.11;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 260 260' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)'/%3E%3C/svg%3E");
-  mix-blend-mode: multiply;
-  z-index: 9999;
+  z-index: 0;
+  background-image:
+    radial-gradient(circle, rgba(20, 20, 20, 0.86) 1px, transparent 1.25px),
+    radial-gradient(circle at 50% 38%, rgba(241, 153, 174, 0.08), transparent 16%),
+    radial-gradient(circle at 42% 52%, rgba(244, 175, 189, 0.06), transparent 18%),
+    radial-gradient(circle at 58% 48%, rgba(215, 170, 226, 0.04), transparent 16%),
+    radial-gradient(circle at 50% 68%, rgba(247, 168, 150, 0.05), transparent 12%),
+    linear-gradient(180deg, #fbf8f4 0%, #f8f4ef 45%, #f6f2ec 100%);
+  background-size:
+    var(--grid-x) var(--grid-y),
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%;
+  background-position:
+    18px 20px,
+    center,
+    center,
+    center,
+    center,
+    center;
+  background-repeat:
+    repeat,
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    no-repeat;
 }
 
+/* Fixed soft paper grain */
 body::after {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.035;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      rgba(255, 255, 255, 0.8) 0px,
-      rgba(255, 255, 255, 0.8) 1px,
-      transparent 2px,
-      transparent 5px
-    );
-  z-index: 9998;
+  z-index: 0;
+  opacity: 0.055;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 260 260' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 260px 260px;
+  mix-blend-mode: multiply;
 }
 
-.date-pill {
-  background: rgba(255, 248, 248, 0.42);
-  border: 1px solid rgba(189, 96, 115, 0.1);
-  box-shadow:
-    0 12px 45px rgba(166, 79, 98, 0.08),
-    inset 0 0 24px rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(10px);
+/* Keeps the actual app above the paper layer */
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+.notebook-page {
+  min-height: 100vh;
+  background: transparent;
 }
 
 .date-menu {
@@ -97,6 +119,6 @@ textarea {
 }
 
 ::selection {
-  background: rgba(239, 191, 208, 0.8);
+  background: rgba(237, 195, 207, 0.85);
   color: #171412;
 }
