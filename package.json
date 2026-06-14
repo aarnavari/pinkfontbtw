@@ -16,19 +16,24 @@
     "productName": "pinkfontbtw",
     "mac": {
       "category": "public.app-category.productivity",
-      "target": ["dmg"]
+      "target": [
+        "dmg"
+      ],
+      "icon": "build/icon.icns"
     },
     "files": [
       "electron/**/*",
-      ".next/**/*",
+      "out/**/*",
       "public/**/*",
+      "build/icon.icns",
       "package.json"
     ]
   },
   "dependencies": {
     "next": "16.2.9",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "serve-handler": "^6.1.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
