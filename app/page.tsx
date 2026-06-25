@@ -50,6 +50,10 @@ function formatDateForDisplay(dateKey: string) {
   return `${day}.${month}.${year}`;
 }
 
+function formatIndexNumber(index: number) {
+  return `(${String(index + 1).padStart(3, "0")})`;
+}
+
 function getLinkHost(url: string) {
   try {
     return new URL(url).hostname.replace("www.", "");
@@ -137,6 +141,11 @@ export default function Home() {
   const imageInsertAfterBlockId = useRef<string | null>(null);
   const starInputRef = useRef<HTMLInputElement | null>(null);
 
+  const entryRef = useRef(entry);
+  const selectedDateRef = useRef(selectedDate);
+  const savedDatesRef = useRef(savedDates);
+  const messageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const existingStarCategories = useMemo(() => {
     const categories = starredItems
       .map((item) => item.name.trim())
@@ -144,6 +153,66 @@ export default function Home() {
 
     return Array.from(new Set(categories)).sort((a, b) => a.localeCompare(b));
   }, [starredItems]);
+
+  function showSavedMessage(message: string) {
+    setSavedMessage(message);
+
+    if (messageTimeoutRef.current) {
+      clearTimeout(messageTimeoutRef.current);
+    }
+
+    messageTimeoutRef.current = setTimeout(() => {
+      setSavedMessage("");
+    }, 1200);
+  }
+
+  function persistEntry(
+    dateToSave = selectedDateRef.current,
+    entryToSave = entryRef.current,
+    shouldShowMessage = false
+  ) {
+    const updatedDates = Array.from(
+      new Set([dateToSave, ...savedDatesRef.current])
+    )
+      .sort()
+      .reverse();
+
+    localStorage.setItem(
+      `pinkfontbtw-entry-${dateToSave}`,
+      JSON.stringify(entryToSave)
+    );
+
+    localStorage.setItem("pinkfontbtw-dates", JSON.stringify(updatedDates));
+
+    entryRef.current = entryToSave;
+    selectedDateRef.current = dateToSave;
+    savedDatesRef.current = updatedDates;
+
+    setSavedDates(updatedDates);
+
+    if (shouldShowMessage) {
+      showSavedMessage("saved locally");
+    }
+  }
+
+  function updateEntryAndPersist(
+    updater: DayEntry | ((currentEntry: DayEntry) => DayEntry)
+  ) {
+    setEntry((currentEntry) => {
+      const nextEntry =
+        typeof updater === "function" ? updater(currentEntry) : updater;
+
+      entryRef.current = nextEntry;
+      persistEntry(selectedDateRef.current, nextEntry, false);
+
+      return nextEntry;
+    });
+  }
+
+  function persistStars(nextStars: StarredItem[]) {
+    setStarredItems(nextStars);
+    localStorage.setItem("pinkfontbtw-stars", JSON.stringify(nextStars));
+  }
 
   useEffect(() => {
     const allDates = localStorage.getItem("pinkfontbtw-dates");
@@ -158,9 +227,13 @@ export default function Home() {
             new Set([...parsedDates, getTodayKey()])
           ) as string[];
 
-          setSavedDates(datesWithToday.sort().reverse());
+          const sortedDates = datesWithToday.sort().reverse();
+
+          savedDatesRef.current = sortedDates;
+          setSavedDates(sortedDates);
         }
       } catch {
+        savedDatesRef.current = [getTodayKey()];
         setSavedDates([getTodayKey()]);
       }
     }
@@ -179,22 +252,51 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    selectedDateRef.current = selectedDate;
+
     const savedEntry = localStorage.getItem(`pinkfontbtw-entry-${selectedDate}`);
 
     if (savedEntry) {
       try {
         const parsedEntry = JSON.parse(savedEntry);
-        setEntry(normalizeEntry(parsedEntry));
+        const normalizedEntry = normalizeEntry(parsedEntry);
+
+        entryRef.current = normalizedEntry;
+        setEntry(normalizedEntry);
       } catch {
-        setEntry(createEmptyEntry());
+        const newEntry = createEmptyEntry();
+
+        entryRef.current = newEntry;
+        setEntry(newEntry);
+        persistEntry(selectedDate, newEntry, false);
       }
     } else {
-      setEntry(createEmptyEntry());
+      const newEntry = createEmptyEntry();
+
+      entryRef.current = newEntry;
+      setEntry(newEntry);
+      persistEntry(selectedDate, newEntry, false);
     }
 
     setSlashBlockId(null);
     setDateMenuOpen(false);
   }, [selectedDate]);
+
+  useEffect(() => {
+    function saveBeforeQuit() {
+      persistEntry(selectedDateRef.current, entryRef.current, false);
+    }
+
+    window.addEventListener("beforeunload", saveBeforeQuit);
+    window.addEventListener("pagehide", saveBeforeQuit);
+    document.addEventListener("visibilitychange", saveBeforeQuit);
+
+    return () => {
+      window.removeEventListener("beforeunload", saveBeforeQuit);
+      window.removeEventListener("pagehide", saveBeforeQuit);
+      document.removeEventListener("visibilitychange", saveBeforeQuit);
+    };
+  }, []);
 
   useEffect(() => {
     if (starModalOpen) {
@@ -203,6 +305,11 @@ export default function Home() {
       }, 30);
     }
   }, [starModalOpen]);
+
+  function selectDate(date: string) {
+    persistEntry(selectedDateRef.current, entryRef.current, false);
+    setSelectedDate(date);
+  }
 
   function resizeTextarea(textarea: HTMLTextAreaElement) {
     textarea.style.height = "auto";
@@ -214,7 +321,7 @@ export default function Home() {
     beforeContent = "",
     afterContent = ""
   ) {
-    setEntry((currentEntry) => {
+    updateEntryAndPersist((currentEntry) => {
       const newBlocks: Block[] = [];
 
       currentEntry.blocks.forEach((block) => {
@@ -251,7 +358,7 @@ export default function Home() {
   }
 
   function updateTextBlock(id: string, content: string) {
-    setEntry((currentEntry) => ({
+    updateEntryAndPersist((currentEntry) => ({
       ...currentEntry,
       blocks: currentEntry.blocks.map((block) =>
         block.id === id && block.type === "text"
@@ -268,7 +375,7 @@ export default function Home() {
   }
 
   function insertBlockAfter(blockId: string, newBlock: Block) {
-    setEntry((currentEntry) => {
+    updateEntryAndPersist((currentEntry) => {
       const blockIndex = currentEntry.blocks.findIndex(
         (block) => block.id === blockId
       );
@@ -291,10 +398,10 @@ export default function Home() {
   }
 
   function insertImageAfterLastBlock(imageSrc: string) {
-    const lastBlock = entry.blocks[entry.blocks.length - 1];
+    const lastBlock = entryRef.current.blocks[entryRef.current.blocks.length - 1];
 
     if (!lastBlock) {
-      setEntry({
+      updateEntryAndPersist({
         blocks: [
           {
             id: crypto.randomUUID(),
@@ -315,7 +422,7 @@ export default function Home() {
   }
 
   function removeSlashFromBlock(blockId: string) {
-    setEntry((currentEntry) => ({
+    updateEntryAndPersist((currentEntry) => ({
       ...currentEntry,
       blocks: currentEntry.blocks.map((block) => {
         if (block.id === blockId && block.type === "text") {
@@ -397,7 +504,7 @@ export default function Home() {
   }
 
   function updateLinkBlock(id: string, url: string) {
-    setEntry((currentEntry) => ({
+    updateEntryAndPersist((currentEntry) => ({
       ...currentEntry,
       blocks: currentEntry.blocks.map((block) =>
         block.id === id && block.type === "link" ? { ...block, url } : block
@@ -406,7 +513,7 @@ export default function Home() {
   }
 
   function deleteBlock(id: string) {
-    setEntry((currentEntry) => {
+    updateEntryAndPersist((currentEntry) => {
       const remainingBlocks = currentEntry.blocks.filter(
         (block) => block.id !== id
       );
@@ -440,48 +547,33 @@ export default function Home() {
   function saveStar() {
     if (!starDraftBlock) return;
 
-    const folderName = (
+    const labelName = (
       starDraftName.trim() || selectedStarCategory.trim()
     ).trim();
 
-    if (!folderName) return;
+    if (!labelName) return;
 
     const newStar: StarredItem = {
       id: crypto.randomUUID(),
-      name: folderName,
+      name: labelName,
       date: selectedDate,
       block: starDraftBlock,
     };
 
     const updatedStars = [newStar, ...starredItems];
 
-    setStarredItems(updatedStars);
-    localStorage.setItem("pinkfontbtw-stars", JSON.stringify(updatedStars));
-
-    setSavedMessage(`added to ${folderName}`);
-    setTimeout(() => setSavedMessage(""), 1200);
+    persistStars(updatedStars);
+    showSavedMessage(`indexed to ${labelName}`);
 
     closeStarModal();
   }
 
   function handleSave() {
-    const updatedDates = Array.from(new Set([selectedDate, ...savedDates]))
-      .sort()
-      .reverse();
-
-    localStorage.setItem(
-      `pinkfontbtw-entry-${selectedDate}`,
-      JSON.stringify(entry)
-    );
-    localStorage.setItem("pinkfontbtw-dates", JSON.stringify(updatedDates));
-
-    setSavedDates(updatedDates);
-    setSavedMessage("saved");
-    setTimeout(() => setSavedMessage(""), 1200);
+    persistEntry(selectedDateRef.current, entryRef.current, true);
   }
 
   return (
-    <main className="notebook-page min-h-screen w-full px-6 py-6 text-[#171412] md:px-10">
+    <main className="notebook-page min-h-screen w-full py-6 text-[#171412]">
       <input
         ref={fileInputRef}
         type="file"
@@ -491,27 +583,50 @@ export default function Home() {
       />
 
       <section className="min-h-screen w-full" onPaste={handlePaste}>
-        <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col pb-24 pt-[2.75rem]">
-          <header className="flex items-center justify-center">
-            <div className="relative">
+        <div className="subtext-shell flex min-h-screen flex-col pb-24 pt-[3.875rem]">
+          <header className="grid grid-cols-[1fr_auto] items-start">
+            <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#b86174]/55">
+              local archive
+            </p>
+
+            <div className="text-right">
+              <p className="font-title text-[28px] leading-none tracking-[-0.04em] text-[#b86174]">
+                Subtext
+              </p>
+
+              <p className="font-mono mt-3 text-[11px] uppercase tracking-[0.16em] text-[#b86174]/55">
+                {savedMessage || "autosaves locally"}
+              </p>
+            </div>
+          </header>
+
+          <section className="mt-[3.875rem] grid grid-cols-[144px_minmax(0,1fr)] gap-x-[72px]">
+            <div />
+
+            <div className="relative w-full max-w-[780px]">
               <button
                 onClick={() => setDateMenuOpen((open) => !open)}
-                className="inline-flex items-center gap-2 text-lg font-semibold tracking-[-0.02em] text-[#b86174] transition hover:opacity-75 md:text-xl"
+                className="group inline-flex items-end gap-4 text-left"
               >
-                <span>{formatDateForDisplay(selectedDate)}</span>
-                <span className="translate-y-[1px] text-xs">⌄</span>
+                <span className="font-title text-[72px] leading-none tracking-[-0.045em] text-[#171412] md:text-[96px]">
+                  {formatDateForDisplay(selectedDate)}
+                </span>
+
+                <span className="font-mono mb-4 text-[13px] text-[#b86174]/65 transition group-hover:opacity-65">
+                  ⌄
+                </span>
               </button>
 
               {dateMenuOpen && (
-                <div className="date-menu absolute left-1/2 top-full z-30 mt-3 w-56 -translate-x-1/2 rounded-md border border-black/8 bg-[#faf7f2] p-2 shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
+                <div className="date-menu absolute left-0 top-full z-30 mt-5 w-64 border border-black/12 bg-[#fbf8f4] p-2">
                   {savedDates.map((date) => (
                     <button
                       key={date}
-                      onClick={() => setSelectedDate(date)}
-                      className={`block w-full rounded-sm px-3 py-2 text-center text-sm tracking-[-0.02em] transition ${
+                      onClick={() => selectDate(date)}
+                      className={`font-mono block w-full px-3 py-3 text-left text-[11px] uppercase tracking-[0.14em] transition ${
                         selectedDate === date
-                          ? "bg-[#efd4db] text-[#171412]"
-                          : "text-[#b86174] hover:bg-[#f4e7ea]"
+                          ? "bg-[#efc8d3]/45 text-[#171412]"
+                          : "text-[#b86174]/65 hover:bg-[#efc8d3]/25"
                       }`}
                     >
                       {formatDateForDisplay(date)}
@@ -519,198 +634,210 @@ export default function Home() {
                   ))}
                 </div>
               )}
+
+              <p className="font-mono mt-5 max-w-[620px] text-[11px] uppercase leading-relaxed tracking-[0.14em] text-[#b86174]/55">
+                daily field sheet for loose thoughts, links, images and fragments
+              </p>
             </div>
-          </header>
+          </section>
 
-          <h1 className="mt-[3.72rem] text-center text-lg font-bold italic tracking-[-0.02em] text-[#b86174] md:text-xl">
-            today&apos;s field notes
-          </h1>
+          <section className="mt-[4.875rem] grid grid-cols-[144px_minmax(0,1fr)] gap-x-[72px]">
+            <div />
 
-          <div className="mx-auto mt-[4.65rem] w-full max-w-[780px] space-y-[3.72rem]">
-            {entry.blocks.map((block) => (
-              <div key={block.id} className="group relative">
-                {block.type === "text" && (
-                  <>
-                    <textarea
-                      value={block.content}
-                      onChange={(event) => {
-                        updateTextBlock(block.id, event.target.value);
-                        resizeTextarea(event.target);
-                      }}
-                      onInput={(event) => {
-                        resizeTextarea(event.currentTarget);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter" || event.shiftKey) return;
+            <div className="grid w-full max-w-[780px] gap-[3.1rem]">
+              {entry.blocks.map((block, index) => (
+                <div
+                  key={block.id}
+                  className="group grid grid-cols-[72px_1fr_140px] gap-x-7"
+                >
+                  <div className="font-mono pt-[0.4rem] text-[11px] tracking-[0.12em] text-[#b86174]/45">
+                    {block.type === "divider" ? "" : formatIndexNumber(index)}
+                  </div>
 
-                        const textarea = event.currentTarget;
-                        const cursorPosition = textarea.selectionStart;
-                        const fullText = block.content;
+                  <div className="min-w-0">
+                    {block.type === "text" && (
+                      <>
+                        <textarea
+                          value={block.content}
+                          ref={(textarea) => {
+                            if (textarea) resizeTextarea(textarea);
+                          }}
+                          onChange={(event) => {
+                            updateTextBlock(block.id, event.target.value);
+                            resizeTextarea(event.target);
+                          }}
+                          onInput={(event) => {
+                            resizeTextarea(event.currentTarget);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" || event.shiftKey) return;
 
-                        const textBeforeCursor = fullText.slice(
-                          0,
-                          cursorPosition
-                        );
-                        const textAfterCursor = fullText.slice(cursorPosition);
+                            const textarea = event.currentTarget;
+                            const cursorPosition = textarea.selectionStart;
+                            const fullText = block.content;
 
-                        const currentLineStart =
-                          textBeforeCursor.lastIndexOf("\n") + 1;
-                        const currentLine =
-                          textBeforeCursor.slice(currentLineStart);
+                            const textBeforeCursor = fullText.slice(
+                              0,
+                              cursorPosition
+                            );
+                            const textAfterCursor =
+                              fullText.slice(cursorPosition);
 
-                        if (currentLine.trim() === "---") {
-                          event.preventDefault();
+                            const currentLineStart =
+                              textBeforeCursor.lastIndexOf("\n") + 1;
+                            const currentLine =
+                              textBeforeCursor.slice(currentLineStart);
 
-                          const contentBeforeDivider =
-                            fullText.slice(0, currentLineStart);
-                          const contentAfterDivider = textAfterCursor.replace(
-                            /^\n/,
-                            ""
-                          );
+                            if (currentLine.trim() === "---") {
+                              event.preventDefault();
 
-                          createDividerFromTextBlock(
-                            block.id,
-                            contentBeforeDivider,
-                            contentAfterDivider
-                          );
-                        }
-                      }}
-                      placeholder="type / for options..."
-                      className="block min-h-[62px] w-full resize-none overflow-hidden bg-transparent text-lg leading-relaxed tracking-[-0.01em] text-[#171412] outline-none placeholder:text-[#171412]/30 md:text-xl"
-                    />
+                              const contentBeforeDivider =
+                                fullText.slice(0, currentLineStart);
+                              const contentAfterDivider =
+                                textAfterCursor.replace(/^\n/, "");
 
-                    {slashBlockId === block.id && (
-                      <div className="absolute left-0 top-full z-20 mt-2 w-44 rounded-md border border-black/8 bg-[#faf7f2] p-2 text-sm shadow-[0_10px_30px_rgba(0,0,0,0.06)]">
-                        <button
-                          onClick={() => chooseText(block.id)}
-                          className="block w-full rounded-sm px-3 py-2 text-left text-[#171412] hover:bg-[#f4e7ea]"
-                        >
-                          text
-                        </button>
+                              createDividerFromTextBlock(
+                                block.id,
+                                contentBeforeDivider,
+                                contentAfterDivider
+                              );
+                            }
+                          }}
+                          placeholder="type / for options..."
+                          className="font-body block min-h-[62px] w-full resize-none overflow-hidden bg-transparent text-[19px] leading-[31px] tracking-[-0.01em] text-[#171412] outline-none placeholder:text-[#171412]/28 md:text-[21px]"
+                        />
 
-                        <button
-                          onClick={() => chooseLink(block.id)}
-                          className="block w-full rounded-sm px-3 py-2 text-left text-[#171412] hover:bg-[#f4e7ea]"
-                        >
-                          embed link
-                        </button>
+                        {slashBlockId === block.id && (
+                          <div className="date-menu absolute z-30 mt-2 w-48 border border-black/12 bg-[#fbf8f4] p-2">
+                            <button
+                              onClick={() => chooseText(block.id)}
+                              className="font-mono block w-full px-3 py-2 text-left text-[11px] uppercase tracking-[0.14em] text-[#171412] hover:bg-[#efc8d3]/25"
+                            >
+                              text
+                            </button>
 
-                        <button
-                          onClick={() => chooseImage(block.id)}
-                          className="block w-full rounded-sm px-3 py-2 text-left text-[#171412] hover:bg-[#f4e7ea]"
-                        >
-                          paste picture
-                        </button>
+                            <button
+                              onClick={() => chooseLink(block.id)}
+                              className="font-mono block w-full px-3 py-2 text-left text-[11px] uppercase tracking-[0.14em] text-[#171412] hover:bg-[#efc8d3]/25"
+                            >
+                              embed link
+                            </button>
+
+                            <button
+                              onClick={() => chooseImage(block.id)}
+                              className="font-mono block w-full px-3 py-2 text-left text-[11px] uppercase tracking-[0.14em] text-[#171412] hover:bg-[#efc8d3]/25"
+                            >
+                              paste picture
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {block.type === "divider" && (
+                      <div className="py-[1.25rem]">
+                        <div className="h-px w-full bg-[#b86174]/25" />
                       </div>
                     )}
-                  </>
-                )}
 
-                {block.type === "divider" && (
-                  <div className="py-[1.65rem]">
-                    <div className="h-px w-full bg-[#b86174]/25" />
-                  </div>
-                )}
+                    {block.type === "link" && (
+                      <div className="border border-black/12 bg-[#fbf8f4]/55 px-4 py-3">
+                        <input
+                          value={block.url}
+                          onChange={(event) =>
+                            updateLinkBlock(block.id, event.target.value)
+                          }
+                          placeholder="paste link..."
+                          className="font-mono w-full bg-transparent text-[12px] uppercase tracking-[0.14em] text-[#171412] outline-none placeholder:text-[#171412]/35"
+                        />
 
-                {block.type === "link" && (
-                  <div className="rounded-sm bg-[#edc3cf]/75 px-4 py-3">
-                    <input
-                      value={block.url}
-                      onChange={(event) =>
-                        updateLinkBlock(block.id, event.target.value)
-                      }
-                      placeholder="paste link..."
-                      className="w-full bg-transparent text-center text-lg tracking-[-0.01em] text-[#171412] outline-none placeholder:text-[#171412]/45 md:text-xl"
-                    />
+                        {block.url && (
+                          <a
+                            href={block.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-mono mt-3 block text-[11px] uppercase tracking-[0.14em] text-[#b86174]/65 underline-offset-4 hover:underline"
+                          >
+                            {getLinkHost(block.url)}
+                          </a>
+                        )}
+                      </div>
+                    )}
 
-                    {block.url && (
-                      <a
-                        href={block.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-2 block text-center text-sm text-[#171412]/55 underline-offset-4 hover:underline"
-                      >
-                        {getLinkHost(block.url)}
-                      </a>
+                    {block.type === "image" && (
+                      <div className="border border-black/12 bg-[#fbf8f4]/55 p-3">
+                        <img
+                          src={block.src}
+                          alt="daily visual"
+                          className="max-h-[520px] w-full object-contain"
+                        />
+                      </div>
                     )}
                   </div>
-                )}
 
-                {block.type === "image" && (
-                  <img
-                    src={block.src}
-                    alt="daily visual"
-                    className="max-h-[520px] w-full object-contain"
-                  />
-                )}
+                  <div className="font-mono flex justify-end pt-[0.38rem] opacity-0 transition group-hover:opacity-100">
+                    <div className="flex items-start gap-4">
+                      {block.type !== "divider" && (
+                        <button
+                          onClick={() => openStarModal(block)}
+                          className="text-right text-[10px] uppercase leading-[1.25] tracking-[0.14em] text-[#b86174]/45 transition hover:text-[#b86174]"
+                          title="index thought"
+                        >
+                          [index
+                          <br />
+                          thought]
+                        </button>
+                      )}
 
-                <div className="absolute -right-12 top-0 hidden items-center gap-2 group-hover:flex">
-                  {block.type !== "divider" && (
-                    <button
-                      onClick={() => openStarModal(block)}
-                      className="text-lg text-[#b86174] transition hover:scale-110 hover:opacity-70"
-                      title="add to star folder"
-                    >
-                      ✦
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => deleteBlock(block.id)}
-                    className="rounded-sm bg-[#f3d8df] px-2 py-1 text-[11px] text-[#8f5561] hover:bg-[#eec8d2]"
-                  >
-                    remove
-                  </button>
+                      <button
+                        onClick={() => deleteBlock(block.id)}
+                        className="text-[10px] uppercase tracking-[0.14em] text-[#b86174]/35 transition hover:text-[#b86174]"
+                      >
+                        [x]
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </section>
         </div>
 
-        <div className="fixed bottom-6 left-6 flex items-center gap-2 md:bottom-8 md:left-8">
+        <div className="subtext-fixed-left fixed bottom-8">
           <Link
             href="/stars"
-            className="text-lg tracking-[-0.02em] text-[#b86174] transition hover:opacity-65 md:text-xl"
+            className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#b86174]/65 transition hover:opacity-65"
           >
-            ✦ star folders
+            open index
+            {starredItems.length > 0 ? ` / ${starredItems.length}` : ""}
           </Link>
-
-          {starredItems.length > 0 && (
-            <span className="text-sm text-[#b86174]/60">
-              {starredItems.length}
-            </span>
-          )}
         </div>
 
-        <div className="fixed bottom-6 right-6 flex items-center gap-3 md:bottom-8 md:right-8">
-          {savedMessage && (
-            <p className="text-xs tracking-[-0.03em] text-[#b86174]/70 md:text-sm">
-              {savedMessage}
-            </p>
-          )}
-
+        <div className="fixed bottom-8 right-8">
           <button
             onClick={handleSave}
-            className="text-lg tracking-[-0.02em] text-[#b86174] transition hover:opacity-65 md:text-xl"
+            className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#b86174]/55 transition hover:text-[#b86174]"
           >
-            save
+            save now
           </button>
         </div>
 
         {starModalOpen && (
-          <div className="fixed inset-0 z-40 bg-[#fbf8f4]/55">
-            <div className="notebook-page flex min-h-screen items-start justify-center px-6 pt-32">
-              <div className="w-full max-w-md rounded-[26px] border border-[#e8d8dc] bg-[rgba(251,248,244,0.92)] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.08)]">
-                <p className="text-center text-2xl text-[#b86174]">✦</p>
+          <div className="fixed inset-0 z-40 bg-[#fbf8f4]/60 backdrop-blur-[2px]">
+            <div className="flex min-h-screen items-start justify-center px-6 pt-32">
+              <div className="w-full max-w-md border border-black/12 bg-[#fbf8f4] p-6">
+                <p className="font-mono text-center text-[11px] uppercase tracking-[0.16em] text-[#b86174]/55">
+                  index thought
+                </p>
 
-                <h2 className="mt-3 text-center text-lg font-bold italic tracking-[-0.02em] text-[#b86174]">
-                  add to star folder
+                <h2 className="font-title mt-4 text-center text-[42px] leading-none tracking-[-0.045em] text-[#171412]">
+                  save fragment
                 </h2>
 
                 {existingStarCategories.length > 0 && (
-                  <div className="mt-5">
-                    <p className="mb-2 text-center text-sm text-[#171412]/45">
-                      choose folder
+                  <div className="mt-7">
+                    <p className="font-mono mb-2 text-center text-[11px] uppercase tracking-[0.14em] text-[#b86174]/45">
+                      choose label
                     </p>
 
                     <select
@@ -718,11 +845,11 @@ export default function Home() {
                       onChange={(event) =>
                         setSelectedStarCategory(event.target.value)
                       }
-                      className="w-full rounded-full border border-[#ead9dd] bg-white/70 px-5 py-3 text-center text-base text-[#171412] outline-none"
+                      className="font-mono w-full border border-black/12 bg-[#fbf8f4] px-4 py-3 text-center text-[11px] uppercase tracking-[0.14em] text-[#171412] outline-none"
                     >
                       {existingStarCategories.map((category) => (
                         <option key={category} value={category}>
-                          ✦ {category}
+                          {category}
                         </option>
                       ))}
                     </select>
@@ -730,8 +857,8 @@ export default function Home() {
                 )}
 
                 <div className="mt-5">
-                  <p className="mb-2 text-center text-sm text-[#171412]/45">
-                    or create new folder
+                  <p className="font-mono mb-2 text-center text-[11px] uppercase tracking-[0.14em] text-[#b86174]/45">
+                    or create new label
                   </p>
 
                   <input
@@ -743,23 +870,23 @@ export default function Home() {
                       if (event.key === "Escape") closeStarModal();
                     }}
                     placeholder="branding"
-                    className="w-full rounded-full border border-[#ead9dd] bg-white/70 px-5 py-3 text-center text-base text-[#171412] outline-none placeholder:text-[#171412]/35"
+                    className="font-mono w-full border border-black/12 bg-[#fbf8f4] px-4 py-3 text-center text-[11px] uppercase tracking-[0.14em] text-[#171412] outline-none placeholder:text-[#171412]/35"
                   />
                 </div>
 
-                <div className="mt-5 flex items-center justify-center gap-3">
+                <div className="font-mono mt-6 flex items-center justify-center gap-5">
                   <button
                     onClick={closeStarModal}
-                    className="rounded-full border border-[#ead9dd] px-4 py-2 text-sm text-[#b86174] transition hover:bg-[#f7eef1]"
+                    className="text-[11px] uppercase tracking-[0.14em] text-[#b86174]/55 transition hover:text-[#b86174]"
                   >
                     cancel
                   </button>
 
                   <button
                     onClick={saveStar}
-                    className="rounded-full bg-[#efc8d3] px-4 py-2 text-sm text-[#8f5561] transition hover:opacity-80"
+                    className="text-[11px] uppercase tracking-[0.14em] text-[#171412] transition hover:text-[#b86174]"
                   >
-                    add to folder
+                    save to index
                   </button>
                 </div>
               </div>

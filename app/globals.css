@@ -4,8 +4,6 @@
   --background: #f8f4ef;
   --foreground: #171412;
   --accent: #b86174;
-  --grid-x: 72px;
-  --grid-y: 62px;
 }
 
 * {
@@ -23,54 +21,41 @@ body {
   position: relative;
   overflow-x: hidden;
   color: var(--foreground);
-  background: #fbf8f4;
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-/* Fixed notebook paper layer — stays visible forever while scrolling */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background-image:
-    radial-gradient(circle, rgba(20, 20, 20, 0.86) 1px, transparent 1.25px),
+  background:
     radial-gradient(circle at 50% 38%, rgba(241, 153, 174, 0.08), transparent 16%),
     radial-gradient(circle at 42% 52%, rgba(244, 175, 189, 0.06), transparent 18%),
     radial-gradient(circle at 58% 48%, rgba(215, 170, 226, 0.04), transparent 16%),
     radial-gradient(circle at 50% 68%, rgba(247, 168, 150, 0.05), transparent 12%),
     linear-gradient(180deg, #fbf8f4 0%, #f8f4ef 45%, #f6f2ec 100%);
   background-size:
-    var(--grid-x) var(--grid-y),
     100% 100%,
     100% 100%,
     100% 100%,
     100% 100%,
     100% 100%;
   background-position:
-    18px 20px,
     center,
     center,
     center,
     center,
     center;
   background-repeat:
-    repeat,
     no-repeat,
     no-repeat,
     no-repeat,
     no-repeat,
     no-repeat;
+  font-family: Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Fixed soft paper grain */
+/* Soft paper grain */
 body::after {
   content: "";
-  position: fixed;
+  position: absolute;
   inset: 0;
+  min-height: 100%;
   pointer-events: none;
   z-index: 0;
   opacity: 0.055;
@@ -98,12 +83,12 @@ body > * {
 @keyframes softOpen {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(-4px);
+    transform: translateY(-4px);
   }
 
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
   }
 }
 
@@ -121,4 +106,38 @@ textarea {
 ::selection {
   background: rgba(237, 195, 207, 0.85);
   color: #171412;
+}
+
+/* Subtext font system */
+.font-title {
+  font-family: var(--font-instrument-serif), Georgia, serif;
+}
+
+.font-mono {
+  font-family: var(--font-ibm-plex-mono), "IBM Plex Mono", monospace;
+}
+
+.font-body {
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+/* Shared Subtext layout system */
+.subtext-shell {
+  width: min(calc(100vw - 288px), 1080px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.subtext-fixed-left {
+  left: max(1.5rem, calc((100vw - 1080px) / 2));
+}
+
+@media (max-width: 900px) {
+  .subtext-shell {
+    width: calc(100vw - 48px);
+  }
+
+  .subtext-fixed-left {
+    left: 1.5rem;
+  }
 }

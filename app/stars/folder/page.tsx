@@ -33,6 +33,10 @@ function formatDateForDisplay(dateKey: string) {
   return `${day}.${month}.${year}`;
 }
 
+function formatIndexNumber(index: number) {
+  return `(${String(index + 1).padStart(3, "0")})`;
+}
+
 function getLinkHost(url: string) {
   try {
     return new URL(url).hostname.replace("www.", "");
@@ -41,9 +45,15 @@ function getLinkHost(url: string) {
   }
 }
 
+function getFragmentType(block: Block) {
+  if (block.type === "text") return "text fragment";
+  if (block.type === "link") return "link fragment";
+  return "image fragment";
+}
+
 function StarFolderContent() {
   const searchParams = useSearchParams();
-  const folder = searchParams.get("name") || "";
+  const label = searchParams.get("name") || "";
 
   const [starredItems, setStarredItems] = useState<StarredItem[]>([]);
 
@@ -63,9 +73,7 @@ function StarFolderContent() {
     }
   }, []);
 
-  const folderItems = starredItems.filter(
-    (item) => item.name.trim() === folder
-  );
+  const labelItems = starredItems.filter((item) => item.name.trim() === label);
 
   function deleteStar(starId: string) {
     const updatedStars = starredItems.filter((star) => star.id !== starId);
@@ -75,76 +83,129 @@ function StarFolderContent() {
   }
 
   return (
-    <main className="notebook-page min-h-screen w-full px-6 py-10 text-[#171412] md:px-10">
-      <div className="mx-auto max-w-5xl pb-24">
-        <header className="mb-[4.65rem] flex items-center justify-between">
+    <main className="notebook-page min-h-screen w-full py-6 text-[#171412]">
+      <div className="subtext-shell flex min-h-screen flex-col pb-24 pt-[3.875rem]">
+        <header className="grid grid-cols-[1fr_auto] items-start">
           <Link
             href="/stars"
-            className="text-lg tracking-[-0.02em] text-[#b86174] transition hover:opacity-65 md:text-xl"
+            className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#b86174]/65 transition hover:opacity-65"
           >
-            ← star folders
+            ← index
           </Link>
 
-          <h1 className="text-lg font-bold italic tracking-[-0.02em] text-[#b86174] md:text-xl">
-            ✦ {folder || "folder"}
-          </h1>
+          <div className="text-right">
+            <p className="font-title text-[28px] leading-none tracking-[-0.04em] text-[#b86174]">
+              Subtext
+            </p>
+
+            <p className="font-mono mt-3 text-[11px] uppercase tracking-[0.16em] text-[#b86174]/55">
+              local label
+            </p>
+          </div>
         </header>
 
-        {!folder ? (
-          <p className="mx-auto max-w-[780px] text-lg leading-relaxed text-[#171412]/45 md:text-xl">
-            no folder selected
-          </p>
-        ) : folderItems.length === 0 ? (
-          <p className="mx-auto max-w-[780px] text-lg leading-relaxed text-[#171412]/45 md:text-xl">
-            nothing here yet
-          </p>
-        ) : (
-          <div className="mx-auto grid max-w-[780px] gap-[3.72rem]">
-            {folderItems.map((star) => (
-              <article
-                key={star.id}
-                className="group relative border-t border-black/10 pt-5"
-              >
-                <div className="mb-[1.9rem] flex items-start justify-between gap-4">
-                  <p className="text-sm text-[#171412]/45">
-                    {formatDateForDisplay(star.date)}
-                  </p>
+        <section className="mt-[3.875rem] grid grid-cols-[144px_minmax(0,1fr)] gap-x-[72px]">
+          <div />
 
-                  <button
-                    onClick={() => deleteStar(star.id)}
-                    className="text-sm text-[#b86174]/60 hover:text-[#b86174]"
-                  >
-                    remove
-                  </button>
-                </div>
+          <div className="w-full max-w-[780px]">
+            <h1 className="font-title text-[86px] lowercase leading-none tracking-[-0.045em] text-[#171412] md:text-[112px]">
+              {label || "label"}
+            </h1>
 
-                {star.block.type === "text" && (
-                  <p className="whitespace-pre-wrap text-lg leading-relaxed tracking-[-0.01em] text-[#171412] md:text-xl">
-                    {star.block.content}
-                  </p>
-                )}
-
-                {star.block.type === "link" && (
-                  <a
-                    href={star.block.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block rounded-sm bg-[#edc3cf]/75 px-4 py-3 text-center text-lg text-[#171412] hover:opacity-75 md:text-xl"
-                  >
-                    {getLinkHost(star.block.url) || star.block.url}
-                  </a>
-                )}
-
-                {star.block.type === "image" && (
-                  <img
-                    src={star.block.src}
-                    alt={folder}
-                    className="max-h-[520px] w-full object-contain"
-                  />
-                )}
-              </article>
-            ))}
+            <p className="font-mono mt-5 max-w-[620px] text-[11px] uppercase leading-relaxed tracking-[0.14em] text-[#b86174]/55">
+              indexed fragments from daily field sheets
+            </p>
           </div>
+        </section>
+
+        {!label ? (
+          <section className="mt-[4.875rem] grid grid-cols-[144px_minmax(0,1fr)] gap-x-[72px]">
+            <div />
+
+            <div className="grid w-full max-w-[780px] grid-cols-[96px_1fr] gap-x-7 border border-black/12 bg-[#fbf8f4]/45 px-6 py-6">
+              <div className="font-mono pt-[0.12rem] text-[11px] tracking-[0.12em] text-[#b86174]/55">
+                (000)
+              </div>
+
+              <p className="font-mono max-w-[520px] text-[11px] uppercase leading-relaxed tracking-[0.14em] text-[#b86174]/45">
+                no index label selected.
+              </p>
+            </div>
+          </section>
+        ) : labelItems.length === 0 ? (
+          <section className="mt-[4.875rem] grid grid-cols-[144px_minmax(0,1fr)] gap-x-[72px]">
+            <div />
+
+            <div className="grid w-full max-w-[780px] grid-cols-[96px_1fr] gap-x-7 border border-black/12 bg-[#fbf8f4]/45 px-6 py-6">
+              <div className="font-mono pt-[0.12rem] text-[11px] tracking-[0.12em] text-[#b86174]/55">
+                (000)
+              </div>
+
+              <p className="font-mono max-w-[520px] text-[11px] uppercase leading-relaxed tracking-[0.14em] text-[#b86174]/45">
+                no fragments inside this label yet.
+              </p>
+            </div>
+          </section>
+        ) : (
+          <section className="mt-[4.875rem] grid grid-cols-[144px_minmax(0,1fr)] gap-x-[72px]">
+            <div />
+
+            <div className="grid w-full max-w-[780px] gap-[1.9375rem]">
+              {labelItems.map((star, index) => (
+                <article
+                  key={star.id}
+                  className="grid min-h-[124px] grid-cols-[96px_1fr_96px] gap-x-7 border border-black/12 bg-[#fbf8f4]/45 px-6 py-6"
+                >
+                  <div className="font-mono pt-[0.12rem] text-[11px] tracking-[0.12em] text-[#b86174]/55">
+                    {formatIndexNumber(index)}
+                  </div>
+
+                  <div>
+                    <div className="font-mono flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] uppercase tracking-[0.14em] text-[#b86174]/50">
+                      <span>{formatDateForDisplay(star.date)}</span>
+                      <span>{getFragmentType(star.block)}</span>
+                    </div>
+
+                    {star.block.type === "text" && (
+                      <p className="mt-6 whitespace-pre-wrap text-[19px] leading-[31px] tracking-[-0.01em] text-[#171412] md:text-[21px]">
+                        {star.block.content}
+                      </p>
+                    )}
+
+                    {star.block.type === "link" && (
+                      <a
+                        href={star.block.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-mono mt-6 block text-[12px] uppercase tracking-[0.14em] text-[#171412] underline-offset-4 transition hover:text-[#b86174] hover:underline"
+                      >
+                        {getLinkHost(star.block.url) || star.block.url}
+                      </a>
+                    )}
+
+                    {star.block.type === "image" && (
+                      <div className="mt-6 border border-black/12 bg-[#fbf8f4]/55 p-3">
+                        <img
+                          src={star.block.src}
+                          alt={label}
+                          className="max-h-[520px] w-full object-contain"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="font-mono flex justify-end pt-[0.12rem]">
+                    <button
+                      onClick={() => deleteStar(star.id)}
+                      className="text-[10px] uppercase tracking-[0.14em] text-[#b86174]/45 transition hover:text-[#b86174]"
+                    >
+                      [remove]
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
         )}
       </div>
     </main>
