@@ -1,48 +1,48 @@
-# pinkfontbtw
+# Subtext
 
-pinkfontbtw is a minimal desktop field-notes app for daily writing, visual fragments, links, and saved thoughts. It keeps each day as a single page and lets you star meaningful fragments into folders.
+Subtext is a desktop archive for daily mind dumps, field notes, links, images, and fragments.
 
-Basically, it allows you to organise your daily mind dumps.
+It gives each day a single writing page, then lets you index meaningful thoughts into your own local archive.
 
-## Download
+## What it does
 
-Download the latest Mac app from the Releases page:
+- Write loose daily notes on a dated field sheet
+- Add text, links, images, and visual fragments
+- Save meaningful blocks into custom index labels
+- Browse saved fragments by label
+- Store everything locally on your computer
+- Works as a Mac desktop app through Electron
 
-https://github.com/aarnavari/pinkfontbtw/releases
+## Why I built it
 
-Choose:
+Subtext is for the kind of thinking that does not fit neatly into productivity apps.
 
-pinkfontbtw-0.1.0-arm64.dmg
+It is not a task manager, Notion replacement, or polished document editor. It is a quiet desktop space for the messy middle: thoughts before they become essays, ideas before they become projects, and fragments worth keeping before they disappear.
 
-This version is for Apple Silicon Macs, such as M1, M2, M3, and M4.
-
-## Features
-
-- Daily single-page field notes
-- Text, links, and images
-- Paste images directly into notes
-- Star meaningful fragments into folders
-- Soft notebook-style interface
-- Private local storage on your own computer
-
-## macOS security note
-
-pinkfontbtw is not code-signed yet, so macOS may show a warning the first time you open it.
-
-To open it:
-
-1. Download the .dmg
-2. Drag pinkfontbtw into Applications
-3. Right-click the app
-4. Choose Open
-
-## Built with
+## Tech stack
 
 - Next.js
 - React
+- TypeScript
+- Tailwind CSS
 - Electron
-- electron-builder
+- Local storage with Electron file backup
 
-## Status
+## Current status
 
-This is an early beta release.
+Subtext is currently an MVP.
+
+Working features:
+
+- Daily writing page
+- Local autosave
+- Quit and reopen persistence
+- Indexing fragments
+- Label-based archive pages
+- Mac desktop build
+
+## Run locally
+```bash
+npm install
+npm run desktop
+
