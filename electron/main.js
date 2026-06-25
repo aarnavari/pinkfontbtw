@@ -6,6 +6,9 @@ const handler = require("serve-handler");
 let mainWindow;
 let server;
 
+const DEV_PORT = 47831;
+const PACKAGED_PORT = 47832;
+
 function startStaticServer() {
   return new Promise((resolve) => {
     const outDir = path.join(__dirname, "../out");
@@ -21,9 +24,8 @@ function startStaticServer() {
       });
     });
 
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      resolve(`http://127.0.0.1:${address.port}`);
+    server.listen(PACKAGED_PORT, "127.0.0.1", () => {
+      resolve(`http://127.0.0.1:${PACKAGED_PORT}`);
     });
   });
 }
@@ -34,9 +36,10 @@ async function createWindow() {
     height: 850,
     minWidth: 900,
     minHeight: 650,
-    title: "pinkfontbtw",
+    title: "Subtext",
     backgroundColor: "#fbf8f4",
     webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -46,7 +49,7 @@ async function createWindow() {
     const url = await startStaticServer();
     await mainWindow.loadURL(url);
   } else {
-    await mainWindow.loadURL("http://localhost:3000");
+    await mainWindow.loadURL(`http://localhost:${DEV_PORT}`);
   }
 
   mainWindow.on("closed", () => {
